@@ -1,138 +1,200 @@
 generator client {
- provider = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 datasource db {
- provider = "postgresql"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  users     User[]
+  @@index([name])
 }
 model User {
- id String @id @default(uuid())
- organizationId String
- email String @unique
- name String
- passwordHash String
- active Boolean @default(true)
- mfaRequired Boolean @default(false)
- sessions Session[]
- members CaseMember[]
+  id               String       @id @default(uuid())
+  organizationId   String
+  stellarPublicKey String       @unique
+  name             String
+  active           Boolean      @default(true)
+  createdAt        DateTime     @default(now())
+  organization     Organization @relation(fields: [organizationId], references: [id])
+  sessions         Session[]
+  members          CaseMember[]
+}
+model AuthChallenge {
+  id        String   @id @default(uuid())
+  publicKey String
+  nonce     String   @unique
+  expiresAt DateTime
+  @@index([publicKey])
 }
 model Session {
- id String @id
- userId String
- user User @relation(fields:[userId],references:[id])
- expiresAt DateTime
+  id        String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  expiresAt DateTime
 }
 model Case {
- id String @id @default(uuid())
- organizationId String
- ref String
- title String
- status String @default("OPEN")
- classification String
- openedAt DateTime @default(now())
- members CaseMember[]
- evidence EvidenceItem[]
- records Record[]
- @@unique([organizationId,ref])
+  id             String       @id @default(uuid())
+  organizationId String
+  ref            String
+  title          String
+  status         String       @default("OPEN")
+  classification String
+  openedAt       DateTime     @default(now())
+  members        CaseMember[]
+  evidence       EvidenceItem[]
+  records        Record[]
+  accessEvents   AccessEvent[]
+  attestations   Attestation[]
+  exportBundles  ExportBundle[]
+  @@unique([organizationId, ref])
 }
 model CaseMember {
- id String @id @default(uuid())
- caseId String
- userId String
- role String
- active Boolean @default(true)
- permissions Json?
- case Case @relation(fields:[caseId],references:[id])
- user User @relation(fields:[userId],references:[id])
- @@unique([caseId,userId])
+  id          String  @id @default(uuid())
+  caseId      String
+  userId      String
+  role        String
+  active      Boolean @default(true)
+  permissions Json?
+  case        Case    @relation(fields: [caseId], references: [id])
+  user        User    @relation(fields: [userId], references: [id])
+  @@unique([caseId, userId])
 }
 model EvidenceItem {
- id String @id @default(uuid())
- caseId String
- ref String
- title String
- source String
- type String
- status String @default("UPLOADING")
- custodianId String
- case Case @relation(fields:[caseId],references:[id])
- versions EvidenceVersion[]
- uploads UploadSession[]
- @@unique([caseId,ref])
+  id          String           @id @default(uuid())
+  caseId      String
+  ref         String
+  title       String
+  source      String
+  type        String
+  sensitivity String           @default("STANDARD")
+  status      String           @default("UPLOADING")
+  custodianId String
+  case        Case             @relation(fields: [caseId], references: [id])
+  versions    EvidenceVersion[]
+  uploads     UploadSession[]
+  sources     EvidenceSource[]
+  @@unique([caseId, ref])
+}
+model EvidenceSource {
+  id             String       @id @default(uuid())
+  evidenceItemId String
+  sourceType     String
+  collectorRef   String?
+  issuingOrgRef  String?
+  notes          String?
+  createdAt      DateTime     @default(now())
+  evidence       EvidenceItem @relation(fields: [evidenceItemId], references: [id])
 }
 model UploadSession {
- id String @id @default(uuid())
- evidenceId String
- objectKey String @unique
- expectedSize Int
- mimeType String
- expiresAt DateTime
- status String @default("PENDING")
- evidence EvidenceItem @relation(fields:[evidenceId],references:[id])
+  id           String       @id @default(uuid())
+  evidenceId   String
+  objectKey    String       @unique
+  expectedSize Int
+  mimeType     String
+  expiresAt    DateTime
+  status       String       @default("PENDING")
+  evidence     EvidenceItem @relation(fields: [evidenceId], references: [id])
 }
 model EvidenceVersion {
- id String @id @default(uuid())
- evidenceId String
- version Int @default(1)
- objectKey String @unique
- objectVersionId String
- sha256 String
- size Int
- mimeType String
- immutable Boolean @default(true)
- importedAt DateTime @default(now())
- evidence EvidenceItem @relation(fields:[evidenceId],references:[id])
- custody CustodyEvent[]
- artifacts DerivedArtifact[]
- @@unique([evidenceId,version])
+  id              String           @id @default(uuid())
+  evidenceId      String
+  version         Int              @default(1)
+  objectKey       String           @unique
+  objectVersionId String
+  sha256          String
+  size            Int
+  mimeType        String
+  immutable       Boolean          @default(true)
+  acquiredAt      DateTime?
+  importedAt      DateTime         @default(now())
+  evidence        EvidenceItem     @relation(fields: [evidenceId], references: [id])
+  custody         CustodyEvent[]
+  artifacts       DerivedArtifact[]
+  @@unique([evidenceId, version])
 }
 model CustodyEvent {
- id String @id @default(uuid())
- versionId String
- actor String
- type String
- toUserId String?
- occurredAt DateTime @default(now())
- reason String
- previousHash String
- eventHash String @unique
- idempotencyKey String @unique
- version EvidenceVersion @relation(fields:[versionId],references:[id])
+  id             String          @id @default(uuid())
+  versionId      String
+  actor          String
+  type           String
+  toUserId       String?
+  occurredAt     DateTime        @default(now())
+  reason         String
+  previousHash   String
+  eventHash      String          @unique
+  idempotencyKey String          @unique
+  signatureRef   String?
+  stellarRef     String?
+  version        EvidenceVersion @relation(fields: [versionId], references: [id])
 }
 model DerivedArtifact {
- id String @id @default(uuid())
- versionId String
- objectKey String @unique
- sha256 String
- type String
- toolName String
- toolVersion String
- parametersHash String
- createdAt DateTime @default(now())
- version EvidenceVersion @relation(fields:[versionId],references:[id])
+  id             String          @id @default(uuid())
+  versionId      String
+  objectKey      String          @unique
+  sha256         String
+  type           String
+  toolName       String
+  toolVersion    String
+  parametersHash String
+  createdAt      DateTime        @default(now())
+  version        EvidenceVersion @relation(fields: [versionId], references: [id])
 }
 model Record {
- id String @id @default(uuid())
- caseId String
- kind String
- data Json
- revision Int @default(1)
- createdAt DateTime @default(now())
- case Case @relation(fields:[caseId],references:[id])
- @@index([caseId,kind])
+  id        String   @id @default(uuid())
+  caseId    String
+  kind      String
+  data      Json
+  revision  Int      @default(1)
+  createdAt DateTime @default(now())
+  case      Case     @relation(fields: [caseId], references: [id])
+  @@index([caseId, kind])
 }
 model AccessEvent {
- id String @id @default(uuid())
- caseId String?
- userId String
- action String
- resourceId String
- requestId String
- occurredAt DateTime @default(now())
+  id           String   @id @default(uuid())
+  caseId       String?
+  userId       String
+  action       String
+  resourceType String   @default("CASE")
+  resourceId   String
+  requestId    String
+  occurredAt   DateTime @default(now())
+  case         Case?    @relation(fields: [caseId], references: [id])
 }
 model Outbox {
- id String @id
- queue String
- data Json
- sentAt DateTime?
- createdAt DateTime @default(now())
+  id        String    @id
+  queue     String
+  data      Json
+  sentAt    DateTime?
+  createdAt DateTime  @default(now())
+  @@index([queue, sentAt])
+}
+
+model Attestation {
+  id            String   @id @default(uuid())
+  caseId        String
+  type          String
+  issuerUserId  String?
+  issuerOrgId   String?
+  subjectRef    String
+  statementHash String
+  status        String   @default("PENDING_CHAIN")
+  stellarRef    String?
+  createdAt     DateTime @default(now())
+  case          Case     @relation(fields: [caseId], references: [id])
+  @@index([caseId, subjectRef])
+}
+
+model ExportBundle {
+  id           String   @id @default(uuid())
+  caseId       String
+  manifestHash String
+  objectKey    String   @unique
+  createdBy    String
+  createdAt    DateTime @default(now())
+  case         Case     @relation(fields: [caseId], references: [id])
+  @@index([caseId])
 }
