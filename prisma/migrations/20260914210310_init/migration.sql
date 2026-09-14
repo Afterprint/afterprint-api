@@ -1,17 +1,32 @@
--- CreateSchema
-CREATE SCHEMA IF NOT EXISTS "public";
+-- CreateTable
+CREATE TABLE "Organization" (
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Organization_pkey" PRIMARY KEY ("id")
+);
 
 -- CreateTable
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
     "organizationId" TEXT NOT NULL,
-    "email" TEXT NOT NULL,
+    "stellarPublicKey" TEXT NOT NULL,
     "name" TEXT NOT NULL,
-    "passwordHash" TEXT NOT NULL,
     "active" BOOLEAN NOT NULL DEFAULT true,
-    "mfaRequired" BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "AuthChallenge" (
+    "id" TEXT NOT NULL,
+    "publicKey" TEXT NOT NULL,
+    "nonce" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "AuthChallenge_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -56,10 +71,24 @@ CREATE TABLE "EvidenceItem" (
     "title" TEXT NOT NULL,
     "source" TEXT NOT NULL,
     "type" TEXT NOT NULL,
+    "sensitivity" TEXT NOT NULL DEFAULT 'STANDARD',
     "status" TEXT NOT NULL DEFAULT 'UPLOADING',
     "custodianId" TEXT NOT NULL,
 
     CONSTRAINT "EvidenceItem_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "EvidenceSource" (
+    "id" TEXT NOT NULL,
+    "evidenceItemId" TEXT NOT NULL,
+    "sourceType" TEXT NOT NULL,
+    "collectorRef" TEXT,
+    "issuingOrgRef" TEXT,
+    "notes" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "EvidenceSource_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -86,6 +115,7 @@ CREATE TABLE "EvidenceVersion" (
     "size" INTEGER NOT NULL,
     "mimeType" TEXT NOT NULL,
     "immutable" BOOLEAN NOT NULL DEFAULT true,
+    "acquiredAt" TIMESTAMP(3),
     "importedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "EvidenceVersion_pkey" PRIMARY KEY ("id")
@@ -103,6 +133,8 @@ CREATE TABLE "CustodyEvent" (
     "previousHash" TEXT NOT NULL,
     "eventHash" TEXT NOT NULL,
     "idempotencyKey" TEXT NOT NULL,
+    "signatureRef" TEXT,
+    "stellarRef" TEXT,
 
     CONSTRAINT "CustodyEvent_pkey" PRIMARY KEY ("id")
 );
@@ -140,6 +172,7 @@ CREATE TABLE "AccessEvent" (
     "caseId" TEXT,
     "userId" TEXT NOT NULL,
     "action" TEXT NOT NULL,
+    "resourceType" TEXT NOT NULL DEFAULT 'CASE',
     "resourceId" TEXT NOT NULL,
     "requestId" TEXT NOT NULL,
     "occurredAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -158,8 +191,45 @@ CREATE TABLE "Outbox" (
     CONSTRAINT "Outbox_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "Attestation" (
+    "id" TEXT NOT NULL,
+    "caseId" TEXT NOT NULL,
+    "type" TEXT NOT NULL,
+    "issuerUserId" TEXT,
+    "issuerOrgId" TEXT,
+    "subjectRef" TEXT NOT NULL,
+    "statementHash" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'PENDING_CHAIN',
+    "stellarRef" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Attestation_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ExportBundle" (
+    "id" TEXT NOT NULL,
+    "caseId" TEXT NOT NULL,
+    "manifestHash" TEXT NOT NULL,
+    "objectKey" TEXT NOT NULL,
+    "createdBy" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ExportBundle_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
-CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
+CREATE INDEX "Organization_name_idx" ON "Organization"("name");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "User_stellarPublicKey_key" ON "User"("stellarPublicKey");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "AuthChallenge_nonce_key" ON "AuthChallenge"("nonce");
+
+-- CreateIndex
+CREATE INDEX "AuthChallenge_publicKey_idx" ON "AuthChallenge"("publicKey");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Case_organizationId_ref_key" ON "Case"("organizationId", "ref");
@@ -191,6 +261,21 @@ CREATE UNIQUE INDEX "DerivedArtifact_objectKey_key" ON "DerivedArtifact"("object
 -- CreateIndex
 CREATE INDEX "Record_caseId_kind_idx" ON "Record"("caseId", "kind");
 
+-- CreateIndex
+CREATE INDEX "Outbox_queue_sentAt_idx" ON "Outbox"("queue", "sentAt");
+
+-- CreateIndex
+CREATE INDEX "Attestation_caseId_subjectRef_idx" ON "Attestation"("caseId", "subjectRef");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ExportBundle_objectKey_key" ON "ExportBundle"("objectKey");
+
+-- CreateIndex
+CREATE INDEX "ExportBundle_caseId_idx" ON "ExportBundle"("caseId");
+
+-- AddForeignKey
+ALTER TABLE "User" ADD CONSTRAINT "User_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
 -- AddForeignKey
 ALTER TABLE "Session" ADD CONSTRAINT "Session_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
@@ -202,6 +287,9 @@ ALTER TABLE "CaseMember" ADD CONSTRAINT "CaseMember_userId_fkey" FOREIGN KEY ("u
 
 -- AddForeignKey
 ALTER TABLE "EvidenceItem" ADD CONSTRAINT "EvidenceItem_caseId_fkey" FOREIGN KEY ("caseId") REFERENCES "Case"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "EvidenceSource" ADD CONSTRAINT "EvidenceSource_evidenceItemId_fkey" FOREIGN KEY ("evidenceItemId") REFERENCES "EvidenceItem"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "UploadSession" ADD CONSTRAINT "UploadSession_evidenceId_fkey" FOREIGN KEY ("evidenceId") REFERENCES "EvidenceItem"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -218,6 +306,14 @@ ALTER TABLE "DerivedArtifact" ADD CONSTRAINT "DerivedArtifact_versionId_fkey" FO
 -- AddForeignKey
 ALTER TABLE "Record" ADD CONSTRAINT "Record_caseId_fkey" FOREIGN KEY ("caseId") REFERENCES "Case"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
+-- AddForeignKey
+ALTER TABLE "AccessEvent" ADD CONSTRAINT "AccessEvent_caseId_fkey" FOREIGN KEY ("caseId") REFERENCES "Case"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Attestation" ADD CONSTRAINT "Attestation_caseId_fkey" FOREIGN KEY ("caseId") REFERENCES "Case"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ExportBundle" ADD CONSTRAINT "ExportBundle_caseId_fkey" FOREIGN KEY ("caseId") REFERENCES "Case"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- Reject mutation even when a buggy application attempts it.
 CREATE FUNCTION afterprint_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
