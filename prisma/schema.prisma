@@ -3,7 +3,6 @@ generator client {
 }
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 model Organization {
   id        String   @id @default(uuid())
