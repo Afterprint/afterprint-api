@@ -331,7 +331,8 @@ class ApiController {
         const input=z.object({subjectRef:z.string().uuid(),statementHash:z.string().regex(/^[a-f0-9]{64}$/)}).strict().parse(body);
         const subject=await record(caseId,input.subjectRef,'reconstruction');
         if((subject.data as any).status!=='FINALIZED'||(subject.data as any).reportHash!==input.statementHash)fail(409,'Attestation must reference the exact finalized report hash');
-        return reply.code(201).send(await db.record.create({data:{caseId,kind:'attestation',data:{...input,issuer:user.id,status:'PENDING_CHAIN'}}}));
+        const att=await db.$transaction(async tx=>{const a=await tx.record.create({data:{caseId,kind:'attestation',data:{...input,issuer:user.id,status:'PENDING_CHAIN'}}});await tx.outbox.create({data:{id:`attest-stellar-${a.id}`,queue:'stellar-anchor',data:{caseId,attestationId:a.id,versionId:input.subjectRef,isAttestation:true}}});return a});
+        return reply.code(201).send({id:att.id,...att.data as object});
       }
 
       fail(404,'Route not found');

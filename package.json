@@ -8,7 +8,7 @@
     "build": "tsc",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test test/*.test.ts",
+    "test": "node --import tsx --test test/*.test.ts test/*.spec.ts",
     "lint": "tsc --noEmit",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
