@@ -23,11 +23,13 @@ export function generateNonce():string{return randomBytes(32).toString('hex')}
 export function verifyStellarSignature(publicKey:string,message:string,signature:string):boolean{
   try{
     const keypair=Keypair.fromPublicKey(publicKey);
-    const msgBuffer=Buffer.from(message,'utf8');
+    // SEP-53: sign SHA256("Stellar Signed Message:\n" + message), not the raw message.
+    const payload=Buffer.concat([Buffer.from('Stellar Signed Message:\n','utf8'),Buffer.from(message,'utf8')]);
+    const messageHash=createHash('sha256').update(payload).digest();
     // Freighter signMessage returns base64-encoded signature
     const sigBuffer=Buffer.from(signature,'base64');
     if(sigBuffer.length!==64)return false;
-    return keypair.verify(msgBuffer,sigBuffer);
+    return keypair.verify(messageHash,sigBuffer);
   }catch{return false}
 }
 export function mediaType(mime:string){return mime.startsWith('video/')?'VIDEO':mime.startsWith('audio/')?'AUDIO':mime.startsWith('image/')?'IMAGE':'DOCUMENT'}
