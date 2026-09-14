@@ -111,7 +111,7 @@ class ApiController {
           if(!user.active)fail(403,'Account is deactivated');
           const token=randomBytes(32).toString('hex');
           await db.session.create({data:{id:sha256(token),userId:user.id,expiresAt:new Date(Date.now()+8*3600000)}});
-          reply.setCookie('afterprint_session',token,{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'strict',path:'/',maxAge:28800});
+          reply.setCookie('afterprint_session',token,{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:process.env.NODE_ENV==='production'?'none':'lax',path:'/',maxAge:28800});
           return reply.send({id:user.id,name:user.name,publicKey:user.stellarPublicKey});
         }
         if(caseId==='logout'&&method==='POST'){
