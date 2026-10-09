@@ -18,5 +18,7 @@ jobs:
       - run: pnpm prisma generate
         env:
           DATABASE_URL: postgresql://user:pass@localhost:5432/ci
+      - run: pnpm format:check
+      - run: pnpm typecheck
       - run: pnpm build
       - run: pnpm test
