@@ -49,10 +49,22 @@ pnpm worker              # background job worker, separate process
 ```
 
 ```bash
-pnpm build      # tsc
-pnpm test       # unit tests (node:test)
+pnpm build          # tsc
+pnpm test           # unit tests (node:test)
 pnpm typecheck
+pnpm format:check   # prettier
 ```
+
+## Stellar anchoring
+
+After evidence is processed, the worker records a SHA-256 of a manifest (digests and opaque references only, never evidence content) on the `evidence_anchor_registry` contract from [`afterprint-contracts`](https://github.com/Afterprint/afterprint-contracts). Choose a signing method in `.env`:
+
+| Method | Set | Notes |
+|---|---|---|
+| In-process | `STELLAR_SIGNER_SECRET`, `STELLAR_EVIDENCE_ANCHOR_CONTRACT` | The worker builds, signs, and submits the Soroban transaction. The key must be the registry's controller. Testnet only. |
+| Signing service | `STELLAR_ANCHOR_SERVICE_URL`, `STELLAR_SIGNER_TOKEN` | Takes priority when set. |
+
+With neither set, anchor jobs stay pending and retry, so nothing is lost. Retrying is safe: the contract treats an identical anchor as a no-op and rejects a conflicting one. See [`src/anchor.ts`](./src/anchor.ts).
 
 ## Contributing
 
@@ -63,7 +75,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for the workflow and coding standards, 
 | | |
 |---|---|
 | **GitHub** | [@helloworld1-star](https://github.com/helloworld1-star) |
-| **Email** | chijiokejoseph20242@gmaill.com |
+| **Email** | devt14985@gmail.com |
 
 ---
 
